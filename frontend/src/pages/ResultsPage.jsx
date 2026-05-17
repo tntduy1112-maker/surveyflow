@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import Navbar    from '../components/ui/Navbar'
+import { useParams, useNavigate, Link } from 'react-router-dom'
+import Navbar     from '../components/ui/Navbar'
 import BriefPanel from '../components/results/BriefPanel'
 import DocsPanel  from '../components/results/DocsPanel'
-import { getOutput } from '../services/survey.service'
+import { getOutput, submitSurvey } from '../services/survey.service'
+import useAuthStore from '../store/useAuthStore'
 
 const OPTION_CLAUDE = 'claude'
 const OPTION_AI     = 'ai'
@@ -11,11 +12,14 @@ const OPTION_AI     = 'ai'
 export default function ResultsPage() {
   const { sessionId } = useParams()
   const navigate      = useNavigate()
+  const { isAuthenticated } = useAuthStore()
 
-  const [output,   setOutput]   = useState(null)
-  const [loading,  setLoading]  = useState(true)
-  const [error,    setError]    = useState(null)
+  const [output,       setOutput]       = useState(null)
+  const [loading,      setLoading]      = useState(true)
+  const [error,        setError]        = useState(null)
   const [activeOption, setActiveOption] = useState(null)
+  const [generating,   setGenerating]   = useState(false)
+  const [genError,     setGenError]     = useState(null)
 
   useEffect(() => {
     if (!sessionId) return
@@ -24,6 +28,20 @@ export default function ResultsPage() {
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
   }, [sessionId])
+
+  async function handleGenerateDocs() {
+    setGenerating(true)
+    setGenError(null)
+    try {
+      const res = await submitSurvey(sessionId)
+      setOutput(res.data.data)
+      setActiveOption(OPTION_AI)
+    } catch (err) {
+      setGenError(err.message)
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   // ── loading ────────────────────────────────────────────────────────────────
   if (loading) {
@@ -94,33 +112,55 @@ export default function ResultsPage() {
               </div>
             </button>
 
-            {/* Option 2 — Any AI */}
-            <button
-              onClick={() => setActiveOption(OPTION_AI)}
-              disabled={!hasDocs}
-              className="text-left p-6 bg-white border-[1.5px] border-gray-border rounded-lg
-                         hover:border-primary hover:shadow-[0_0_0_3px_rgba(12,102,228,0.1)]
-                         transition-all duration-150 group
-                         disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-gray-border
-                         disabled:hover:shadow-none"
-            >
+            {/* Option 2 — Any AI (login-gated) */}
+            <div className="text-left p-6 bg-white border-[1.5px] border-gray-border rounded-lg">
               <div className="text-2xl mb-3">🤖</div>
-              <h3 className="text-[16px] font-semibold text-navy mb-1 group-hover:text-primary transition-colors">
-                Use with any AI
-              </h3>
-              <p className="text-[13px] text-gray-dark leading-relaxed">
-                View and download 4 AI-generated documents — Spec, Stories, Deployment Plan, Test Cases — ready for Codex, Gemini, or any other tool.
+              <h3 className="text-[16px] font-semibold text-navy mb-1">Use with any AI</h3>
+              <p className="text-[13px] text-gray-dark leading-relaxed mb-4">
+                Get 4 AI-generated documents — Spec, Stories, Deployment Plan, Test Cases — for Codex, Gemini, or any other tool.
               </p>
-              {!hasDocs ? (
-                <div className="mt-4 text-[13px] text-gray-medium">
-                  Documents not generated (API key not set)
+
+              {hasDocs ? (
+                <button
+                  onClick={() => setActiveOption(OPTION_AI)}
+                  className="text-[13px] font-semibold text-primary hover:underline"
+                >
+                  View documents →
+                </button>
+              ) : !isAuthenticated() ? (
+                <div>
+                  <p className="text-[12px] text-gray-medium mb-3">Free account required to generate AI documents.</p>
+                  <div className="flex gap-2 flex-wrap">
+                    <Link
+                      to="/login"
+                      state={{ from: `/results/${sessionId}` }}
+                      className="btn-primary text-[13px] px-4 py-2 min-h-[36px]"
+                    >
+                      Sign in
+                    </Link>
+                    <Link
+                      to="/register"
+                      state={{ from: `/results/${sessionId}` }}
+                      className="btn-secondary text-[13px] px-4 py-2 min-h-[36px]"
+                    >
+                      Register free
+                    </Link>
+                  </div>
+                </div>
+              ) : generating ? (
+                <div className="flex items-center gap-2 text-[13px] text-gray-dark">
+                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  Generating... (~30s)
                 </div>
               ) : (
-                <div className="mt-4 text-[13px] font-semibold text-primary group-hover:underline">
-                  View documents →
+                <div>
+                  {genError && <p className="text-[12px] text-red-500 mb-2">{genError}</p>}
+                  <button onClick={handleGenerateDocs} className="btn-primary text-[13px] px-4 py-2 min-h-[36px]">
+                    Generate AI docs →
+                  </button>
                 </div>
               )}
-            </button>
+            </div>
           </div>
 
           {/* Restart */}

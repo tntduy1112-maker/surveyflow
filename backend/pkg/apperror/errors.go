@@ -36,3 +36,9 @@ var (
 	ErrSessionNotFound  = &AppError{Code: "SESSION_NOT_FOUND", Message: "Survey session not found", StatusCode: http.StatusNotFound}
 	ErrAlreadySubmitted = &AppError{Code: "ALREADY_SUBMITTED", Message: "Session already submitted", StatusCode: http.StatusConflict}
 )
+
+var (
+	ErrInvalidCredentials = &AppError{Code: "INVALID_CREDENTIALS", Message: "Invalid email or password", StatusCode: 401}
+	ErrInvalidToken       = &AppError{Code: "INVALID_TOKEN",       Message: "Invalid or expired token",  StatusCode: 401}
+	ErrUnauthorized       = &AppError{Code: "UNAUTHORIZED",        Message: "Authentication required",   StatusCode: 401}
+)

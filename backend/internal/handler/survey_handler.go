@@ -7,16 +7,18 @@ import (
 	"github.com/google/uuid"
 	"github.com/productcon/survey-agent/internal/dto/request"
 	"github.com/productcon/survey-agent/internal/dto/response"
+	"github.com/productcon/survey-agent/internal/middleware"
 	"github.com/productcon/survey-agent/internal/service"
 	"github.com/productcon/survey-agent/pkg/apperror"
 )
 
 type SurveyHandler struct {
-	svc *service.SurveyService
+	svc     *service.SurveyService
+	authSvc *service.AuthService
 }
 
-func NewSurveyHandler(svc *service.SurveyService) *SurveyHandler {
-	return &SurveyHandler{svc: svc}
+func NewSurveyHandler(svc *service.SurveyService, authSvc *service.AuthService) *SurveyHandler {
+	return &SurveyHandler{svc: svc, authSvc: authSvc}
 }
 
 func (h *SurveyHandler) CreateSession(c *gin.Context) {
@@ -74,11 +76,30 @@ func (h *SurveyHandler) GetSession(c *gin.Context) {
 }
 
 func (h *SurveyHandler) Submit(c *gin.Context) {
+	// Auth required for Option 2 (Claude doc generation)
+	userID, authenticated := middleware.GetUserID(c)
+
 	sessionID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		response.Error(c, apperror.ErrBadRequest)
 		return
 	}
+
+	// Link session to user if logged in
+	if authenticated && h.authSvc != nil {
+		_ = h.authSvc.LinkSession(c.Request.Context(), sessionID, userID)
+	}
+
+	// Require auth to trigger Claude generation
+	if !authenticated {
+		response.Error(c, &apperror.AppError{
+			Code:       "AUTH_REQUIRED",
+			Message:    "Login required to generate AI documents",
+			StatusCode: 401,
+		})
+		return
+	}
+
 	output, err := h.svc.Submit(c.Request.Context(), sessionID)
 	if err != nil {
 		if output != nil && output.BriefText != nil {

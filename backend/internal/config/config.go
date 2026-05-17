@@ -12,7 +12,15 @@ type Config struct {
 	Database  DatabaseConfig
 	Redis     RedisConfig
 	Anthropic AnthropicConfig
+	JWT       JWTConfig
 	SMTP      SMTPConfig
+}
+
+type JWTConfig struct {
+	AccessSecret  string
+	RefreshSecret string
+	AccessTTL     int // minutes
+	RefreshTTL    int // days
 }
 
 type AppConfig struct {
@@ -102,6 +110,12 @@ func Load() (*Config, error) {
 			APIKey: viper.GetString("ANTHROPIC_API_KEY"),
 			Model:  viper.GetString("ANTHROPIC_MODEL"),
 		},
+		JWT: JWTConfig{
+			AccessSecret:  viper.GetString("JWT_ACCESS_SECRET"),
+			RefreshSecret: viper.GetString("JWT_REFRESH_SECRET"),
+			AccessTTL:     viper.GetInt("JWT_ACCESS_TTL_MINUTES"),
+			RefreshTTL:    viper.GetInt("JWT_REFRESH_TTL_DAYS"),
+		},
 		SMTP: SMTPConfig{
 			Host: viper.GetString("SMTP_HOST"),
 			Port: viper.GetInt("SMTP_PORT"),
@@ -128,5 +142,7 @@ func setDefaults() {
 	viper.SetDefault("REDIS_PORT", "6379")
 	viper.SetDefault("REDIS_DB", 0)
 	viper.SetDefault("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+	viper.SetDefault("JWT_ACCESS_TTL_MINUTES", 15)
+	viper.SetDefault("JWT_REFRESH_TTL_DAYS", 7)
 	viper.SetDefault("SMTP_PORT", 1025)
 }

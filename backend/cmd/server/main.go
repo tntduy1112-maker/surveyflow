@@ -45,9 +45,12 @@ func main() {
 
 	// Wire layers
 	surveyRepo := repository.NewSurveyRepository(pool)
+	authRepo   := repository.NewAuthRepository(pool)
 	claudeSvc  := service.NewClaudeService(cfg.Anthropic.APIKey, cfg.Anthropic.Model)
 	surveySvc  := service.NewSurveyService(surveyRepo, claudeSvc)
-	surveyH    := handler.NewSurveyHandler(surveySvc)
+	authSvc    := service.NewAuthService(authRepo, cfg.JWT)
+	surveyH    := handler.NewSurveyHandler(surveySvc, authSvc)
+	authH      := handler.NewAuthHandler(authSvc)
 
 	if cfg.App.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -59,7 +62,7 @@ func main() {
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{cfg.App.FrontendURL},
 		AllowMethods:     []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
@@ -70,16 +73,32 @@ func main() {
 	})
 
 	v1 := r.Group("/api/v1")
+
+	// Auth routes (public)
+	auth := v1.Group("/auth")
+	{
+		auth.POST("/register", middleware.RateLimit(redisClient, 10, time.Hour), authH.Register)
+		auth.POST("/login",    middleware.RateLimit(redisClient, 20, time.Hour), authH.Login)
+		auth.POST("/refresh",  authH.Refresh)
+		auth.POST("/logout",   authH.Logout)
+		auth.GET("/me",        middleware.Auth(cfg.JWT.AccessSecret), authH.Me)
+		auth.GET("/sessions",  middleware.Auth(cfg.JWT.AccessSecret), authH.MySessions)
+	}
+
+	// Survey routes
 	sessions := v1.Group("/sessions")
 	{
 		sessions.POST("",
 			middleware.RateLimit(redisClient, 20, time.Hour),
 			surveyH.CreateSession,
 		)
-		sessions.GET("/:id", surveyH.GetSession)
+		sessions.GET("/:id",          surveyH.GetSession)
 		sessions.PATCH("/:id/answers", surveyH.SaveAnswer)
+
+		// Submit requires login (OptionalAuth passes user context; handler enforces)
 		sessions.POST("/:id/submit",
 			middleware.RateLimit(redisClient, 5, time.Hour),
+			middleware.OptionalAuth(cfg.JWT.AccessSecret),
 			surveyH.Submit,
 		)
 		sessions.GET("/:id/output", surveyH.GetOutput)
@@ -87,9 +106,8 @@ func main() {
 	}
 
 	srv := &http.Server{
-		Addr:    ":" + cfg.App.Port,
-		Handler: r,
-		// WriteTimeout raised to 120s: Submit blocks while Claude generates 4 docs
+		Addr:         ":" + cfg.App.Port,
+		Handler:      r,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 120 * time.Second,
 		IdleTimeout:  60 * time.Second,
