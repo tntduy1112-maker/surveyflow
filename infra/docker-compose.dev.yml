@@ -69,7 +69,7 @@ services:
     container_name: survey-frontend
     restart: always
     ports:
-      - "80:80"
+      - "8081:80"
     depends_on:
       backend:
         condition: service_healthy
