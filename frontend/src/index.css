@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; }
+
+body {
+  background-color: #F1F2F4;
+  color: #091E42;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  min-height: 100vh;
+  margin: 0;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary text-white font-semibold px-5 py-2.5 rounded-btn
+           shadow-btn hover:bg-primary-hover active:bg-primary-active
+           disabled:opacity-40 disabled:cursor-not-allowed
+           transition-colors duration-150 inline-flex items-center gap-1.5 min-h-[44px];
+  }
+  .btn-secondary {
+    @apply bg-white text-navy-2 font-semibold px-5 py-2.5 rounded-btn
+           border border-gray-border hover:bg-gray-bg
+           disabled:opacity-40 disabled:cursor-not-allowed
+           transition-colors duration-150 inline-flex items-center gap-1.5 min-h-[44px];
+  }
+  .btn-ghost {
+    @apply bg-transparent text-gray-dark font-semibold px-5 py-2.5 rounded-btn
+           hover:bg-gray-bg
+           transition-colors duration-150 inline-flex items-center gap-1.5 min-h-[44px];
+  }
+  .card {
+    @apply bg-white border border-gray-border rounded-md p-8 shadow-card;
+  }
+  .input-field {
+    @apply w-full bg-white border border-gray-border rounded-btn px-3 py-3
+           text-navy text-[15px] outline-none
+           focus:border-primary focus:ring-2 focus:ring-primary/20
+           placeholder:text-gray-medium transition-all duration-150;
+  }
+}

@@ -1,0 +1,21 @@
+# Env files
+**/.env
+**/.env.local
+!**/.env.example
+!**/infra/.env.dev
+
+# Go
+backend/bin/
+backend/tmp/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Docker volumes
+infra/postgres_data/
+infra/redis_data/
+
+# OS
+.DS_Store
+*.swp
