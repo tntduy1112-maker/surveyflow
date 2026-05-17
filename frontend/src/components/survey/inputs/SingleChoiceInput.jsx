@@ -1,12 +1,12 @@
 import useSurveyStore from '../../../store/useSurveyStore'
 
-export default function SingleChoiceInput({ question }) {
+export default function SingleChoiceInput({ question, onSelect }) {
   const { isSelected, setSingle, others, setOther } = useSurveyStore()
   const otherSelected = isSelected(question.id, '__other__')
 
   function handleSelect(value) {
     setSingle(question.id, value)
-    // detail_level change is handled reactively in the store via getVisible()
+    if (value !== '__other__') onSelect?.(value)
   }
 
   return (

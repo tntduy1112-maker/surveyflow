@@ -4,7 +4,7 @@ import MultiChoiceInput  from './inputs/MultiChoiceInput'
 import UploadInput       from './inputs/UploadInput'
 import TextAreaInput     from './inputs/TextAreaInput'
 
-export default function QuestionCard({ question, questionNumber, total }) {
+export default function QuestionCard({ question, questionNumber, total, onSelect }) {
   return (
     // key on question.id causes React to unmount+remount → triggers fadeUp CSS animation
     <div className="card animate-[fadeUp_0.22s_ease]">
@@ -29,7 +29,7 @@ export default function QuestionCard({ question, questionNumber, total }) {
       )}
 
       {question.type === 'text_fields'     && <TextFieldsInput   question={question} />}
-      {question.type === 'single'          && <SingleChoiceInput question={question} />}
+      {question.type === 'single'          && <SingleChoiceInput question={question} onSelect={onSelect} />}
       {question.type === 'multiple'        && <MultiChoiceInput  question={question} />}
       {question.type === 'multiple_upload' && <UploadInput       question={question} />}
       {question.type === 'textarea_only'   && <TextAreaInput     question={question} />}

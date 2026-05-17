@@ -76,6 +76,9 @@ export default function SurveyPage() {
           question={question}
           questionNumber={store.currentIdx + 1}
           total={total}
+          onSelect={question.id === 'detail_level'
+            ? () => setTimeout(() => handleNext(), 300)
+            : undefined}
         />
 
         <NavButtons
