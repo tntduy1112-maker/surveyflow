@@ -3,8 +3,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import Navbar     from '../components/ui/Navbar'
 import BriefPanel from '../components/results/BriefPanel'
 import DocsPanel  from '../components/results/DocsPanel'
-import { getOutput, submitSurvey } from '../services/survey.service'
+import { getSession, getOutput, submitSurvey } from '../services/survey.service'
 import useAuthStore from '../store/useAuthStore'
+import { generateBrief } from '../utils/generateBrief'
 
 const OPTION_CLAUDE = 'claude'
 const OPTION_AI     = 'ai'
@@ -14,7 +15,9 @@ export default function ResultsPage() {
   const navigate      = useNavigate()
   const { isAuthenticated } = useAuthStore()
 
-  const [output,       setOutput]       = useState(null)
+  const [session,      setSession]      = useState(null)
+  const [brief,        setBrief]        = useState(null)
+  const [docsOutput,   setDocsOutput]   = useState(null)
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState(null)
   const [activeOption, setActiveOption] = useState(null)
@@ -23,10 +26,23 @@ export default function ResultsPage() {
 
   useEffect(() => {
     if (!sessionId) return
-    getOutput(sessionId)
-      .then(res => setOutput(res.data.data))
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false))
+    // Load session answers to generate the brief client-side
+    Promise.all([
+      getSession(sessionId),
+      getOutput(sessionId).catch(() => null), // may not exist yet
+    ]).then(([sessRes, outRes]) => {
+      const sess = sessRes.data.data
+      setSession(sess)
+      // Generate brief from answers in-browser (no Claude call needed)
+      if (sess?.answers?.length) {
+        setBrief(generateBrief(sess.answers, sess.detail_level))
+      }
+      // If docs already exist (re-visit after generation), load them
+      if (outRes?.data?.data?.product_spec) {
+        setDocsOutput(outRes.data.data)
+      }
+    }).catch(err => setError(err.message))
+    .finally(() => setLoading(false))
   }, [sessionId])
 
   async function handleGenerateDocs() {
@@ -34,7 +50,7 @@ export default function ResultsPage() {
     setGenError(null)
     try {
       const res = await submitSurvey(sessionId)
-      setOutput(res.data.data)
+      setDocsOutput(res.data.data)
       setActiveOption(OPTION_AI)
     } catch (err) {
       setGenError(err.message)
@@ -43,38 +59,32 @@ export default function ResultsPage() {
     }
   }
 
-  // ── loading ────────────────────────────────────────────────────────────────
+  // ── loading ──────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-bg flex flex-col items-center justify-center gap-3">
         <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-        <p className="text-[14px] text-gray-dark">Loading your results...</p>
+        <p className="text-[14px] text-gray-dark">Preparing your results...</p>
       </div>
     )
   }
 
-  // ── error ──────────────────────────────────────────────────────────────────
-  if (error || !output) {
+  if (error) {
     return (
       <div className="min-h-screen bg-gray-bg">
         <Navbar />
         <div className="max-w-[680px] mx-auto mt-16 px-6">
           <div className="card text-center">
-            <div className="text-3xl mb-3">⚠️</div>
             <h2 className="text-xl font-medium text-navy mb-2">Could not load results</h2>
-            <p className="text-[14px] text-gray-dark mb-6">{error || 'Output not found.'}</p>
-            <button onClick={() => navigate('/survey')} className="btn-primary mx-auto">
-              Start new survey
-            </button>
+            <p className="text-[14px] text-gray-dark mb-6">{error}</p>
+            <button onClick={() => navigate('/survey')} className="btn-primary mx-auto">Start new survey</button>
           </div>
         </div>
       </div>
     )
   }
 
-  const hasDocs = output.product_spec || output.user_stories || output.deployment_plan || output.test_cases
-
-  // ── chooser ────────────────────────────────────────────────────────────────
+  // ── chooser ───────────────────────────────────────────────────────────────
   if (!activeOption) {
     return (
       <div className="min-h-screen bg-gray-bg">
@@ -91,7 +101,7 @@ export default function ResultsPage() {
 
           {/* Two option cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            {/* Option 1 — Claude Code */}
+            {/* Option 1 — Claude Code (no login needed) */}
             <button
               onClick={() => setActiveOption(OPTION_CLAUDE)}
               className="text-left p-6 bg-white border-[1.5px] border-gray-border rounded-lg
@@ -103,12 +113,12 @@ export default function ResultsPage() {
                 Use with Claude Code
               </h3>
               <p className="text-[13px] text-gray-dark leading-relaxed">
-                Copy the plain-text brief and paste it into Claude Code. Run{' '}
+                Copy the plain-text brief and paste into Claude Code. Run{' '}
                 <code className="bg-gray-bg px-1 rounded text-[12px]">/business-case</code>{' '}
                 to start the full 9-step build pipeline.
               </p>
               <div className="mt-4 text-[13px] font-semibold text-primary group-hover:underline">
-                Copy brief →
+                Copy brief — no login needed →
               </div>
             </button>
 
@@ -120,7 +130,8 @@ export default function ResultsPage() {
                 Get 4 AI-generated documents — Spec, Stories, Deployment Plan, Test Cases — for Codex, Gemini, or any other tool.
               </p>
 
-              {hasDocs ? (
+              {docsOutput?.product_spec ? (
+                // Already generated — go straight to docs view
                 <button
                   onClick={() => setActiveOption(OPTION_AI)}
                   className="text-[13px] font-semibold text-primary hover:underline"
@@ -128,6 +139,7 @@ export default function ResultsPage() {
                   View documents →
                 </button>
               ) : !isAuthenticated() ? (
+                // Not logged in — show gate
                 <div>
                   <p className="text-[12px] text-gray-medium mb-3">Free account required to generate AI documents.</p>
                   <div className="flex gap-2 flex-wrap">
@@ -166,10 +178,7 @@ export default function ResultsPage() {
           {/* Restart */}
           <div className="text-center mt-8">
             <button
-              onClick={() => {
-                localStorage.removeItem('survey_session_id')
-                navigate('/survey')
-              }}
+              onClick={() => { localStorage.removeItem('survey_session_id'); navigate('/survey') }}
               className="btn-ghost text-[13px]"
             >
               ← Start a new survey
@@ -180,21 +189,15 @@ export default function ResultsPage() {
     )
   }
 
-  // ── active panel ───────────────────────────────────────────────────────────
+  // ── active panel ──────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-bg">
       <Navbar />
       <div className="max-w-[760px] mx-auto mt-10 mb-24 px-6">
-
-        {/* Back to chooser */}
-        <button
-          onClick={() => setActiveOption(null)}
-          className="btn-ghost text-[13px] mb-6 -ml-2"
-        >
+        <button onClick={() => setActiveOption(null)} className="btn-ghost text-[13px] mb-6 -ml-2">
           ← Back to options
         </button>
 
-        {/* Panel heading */}
         <div className="mb-6">
           <h2 className="text-xl font-medium text-navy">
             {activeOption === OPTION_CLAUDE ? '⚡ Claude Code Brief' : '🤖 AI Document Package'}
@@ -206,21 +209,12 @@ export default function ResultsPage() {
           </p>
         </div>
 
-        {/* Panel content */}
-        {activeOption === OPTION_CLAUDE && output.brief_text && (
-          <BriefPanel brief={output.brief_text} />
-        )}
-        {activeOption === OPTION_AI && (
-          <DocsPanel output={output} />
-        )}
+        {activeOption === OPTION_CLAUDE && brief && <BriefPanel brief={brief} />}
+        {activeOption === OPTION_AI && docsOutput && <DocsPanel output={docsOutput} />}
 
-        {/* Restart */}
         <div className="text-center mt-10">
           <button
-            onClick={() => {
-              localStorage.removeItem('survey_session_id')
-              navigate('/survey')
-            }}
+            onClick={() => { localStorage.removeItem('survey_session_id'); navigate('/survey') }}
             className="btn-ghost text-[13px]"
           >
             ← Start a new survey
